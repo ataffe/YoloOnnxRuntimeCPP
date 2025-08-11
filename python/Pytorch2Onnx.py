@@ -8,4 +8,4 @@ if __name__ == '__main__':
     print('Converting YOLO model to ONNX...')
     model = YOLO(args.model_path)
     model.eval()
-    model.export(format='onnx')
+    model.export(format='onnx', simplify=True)
