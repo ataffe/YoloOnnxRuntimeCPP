@@ -27,11 +27,11 @@ void LetterBox(const cv::Mat &image, cv::Mat &output_image, const cv::Size &new_
         output_image = image.clone();
     }
 
-    int top = static_cast<int>(std::round(dh - 0.1f));
-    int bottom = static_cast<int>(std::round(dh + 0.1f));
-    int left = static_cast<int>(std::round(dw - 0.1f));
-    int right = static_cast<int>(std::round(dw + 0.1f));
-    cv::copyMakeBorder(output_image, output_image, top, bottom, left, right, cv::BORDER_CONSTANT,
+    int pad_top = static_cast<int>(std::round(dh - 0.1f));
+    int pad_bottom = static_cast<int>(std::round(dh + 0.1f));
+    int pad_left = static_cast<int>(std::round(dw - 0.1f));
+    int pad_right = static_cast<int>(std::round(dw + 0.1f));
+    cv::copyMakeBorder(output_image, output_image, pad_top, pad_bottom, pad_left, pad_right, cv::BORDER_CONSTANT,
                        cv::Scalar(DEFAULT_LETTERBOX_PAD_VALUE, DEFAULT_LETTERBOX_PAD_VALUE,
                                   DEFAULT_LETTERBOX_PAD_VALUE));
 }

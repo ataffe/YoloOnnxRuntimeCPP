@@ -10,6 +10,12 @@
 #include <map>
 #include <iostream>
 
+struct YoloBoundingBox {
+    cv::Rect bounding_box;
+    double confidence;
+    int class_id;
+};
+
 std::map<int, std::string> ReadCOCOLabels(const std::string &labels_path) {
     std::ifstream labels_file(labels_path);
     if (!labels_file.is_open()) {
@@ -63,7 +69,7 @@ Ort::Value BlobToONNXTensor(const cv::Mat &blob) {
     );
 }
 
-cv::Mat getYoloBoxes(std::vector<Ort::Value> &output) {
+cv::Mat GetYoloBoxes(std::vector<Ort::Value> &output) {
     std::vector<int64_t> output_shape = output[0].GetTensorTypeAndShapeInfo().GetShape();
     // [batch size, mask weights, boxes predicted]=>[bs, preds_num, features]
     return cv::Mat(
@@ -72,12 +78,6 @@ cv::Mat getYoloBoxes(std::vector<Ort::Value> &output) {
         CV_32F,
         output[0].GetTensorMutableData<float>()).t();
 }
-
-struct YoloBoundingBox {
-    cv::Rect bounding_box;
-    double confidence;
-    int class_id;
-};
 
 void ClipBox(cv::Rect &box, const cv::Size &shape) {
     box.x = std::max(0, std::min(box.x, shape.width));
@@ -88,16 +88,16 @@ void ClipBox(cv::Rect &box, const cv::Size &shape) {
 
 void ScaleYoloBoundingBox(YoloBoundingBox &box, const cv::Size &original_shape) {
     cv::Size yolo_shape(640, 640);
-    float gain = std::min(static_cast<float>(yolo_shape.width) / static_cast<float>(original_shape.width),
-        static_cast<float>(yolo_shape.height) / static_cast<float>(original_shape.height));
-    float pad_x = (yolo_shape.width - original_shape.width * gain) / 2;
-    float pad_y = (yolo_shape.height - original_shape.height * gain) / 2;
-    box.bounding_box.x -= pad_x;
-    box.bounding_box.y -= pad_y;
-    box.bounding_box.x /= gain;
-    box.bounding_box.y /= gain;
-    box.bounding_box.width /= gain;
-    box.bounding_box.height /= gain;
+    float scale_ratio = std::min(static_cast<float>(yolo_shape.width) / static_cast<float>(original_shape.width),
+                                 static_cast<float>(yolo_shape.height) / static_cast<float>(original_shape.height));
+    float letterbox_pad_horizontal = (yolo_shape.width - original_shape.width * scale_ratio) / 2;
+    float letterbox_pad_vertical = (yolo_shape.height - original_shape.height * scale_ratio) / 2;
+    box.bounding_box.x -= letterbox_pad_horizontal;
+    box.bounding_box.y -= letterbox_pad_vertical;
+    box.bounding_box.x /= scale_ratio;
+    box.bounding_box.y /= scale_ratio;
+    box.bounding_box.width /= scale_ratio;
+    box.bounding_box.height /= scale_ratio;
     ClipBox(box.bounding_box, original_shape);
 }
 
@@ -152,8 +152,9 @@ int main() {
     const Ort::Env env(ORT_LOGGING_LEVEL_ERROR, "Yolo Tutorial");
     OrtCUDAProviderOptionsV2 *cuda_provider = nullptr;
     Ort::Session yolo_model_session = LoadYoloModel(
-        env, "/home/alex/Projects/MediumBlog/YoloOnnxRuntimeCPP/weights/yolo11s-imagenet.onnx", cuda_provider);
-    cv::Mat image = cv::imread("/home/alex/Projects/MediumBlog/YoloOnnxRuntimeCPP/test_images/ExampleImageUnsplash.jpg");
+        env, "/home/alex/Projects/MediumBlog/YoloOnnxRuntimeCPP/weights/yolo11s-coco.onnx", cuda_provider);
+    cv::Mat image =
+            cv::imread("/home/alex/Projects/MediumBlog/YoloOnnxRuntimeCPP/test_images/ex2_coco2017.jpg");
     cv::Mat blob = ImageToBlob(image);
     Ort::Value input_tensor = BlobToONNXTensor(blob);
     Ort::AllocatorWithDefaultOptions allocator;
@@ -169,9 +170,10 @@ int main() {
         output_names,
         1
     );
-    cv::Mat raw_boxes = getYoloBoxes(output);
+    cv::Mat raw_boxes = GetYoloBoxes(output);
     std::vector<YoloBoundingBox> boxes = ProcessYoloOutput(raw_boxes, image.size());
-    std::map<int, std::string> labels = ReadCOCOLabels("/home/alex/Projects/MediumBlog/YoloOnnxRuntimeCPP/labels/coco.txt");
+    std::map<int, std::string> labels = ReadCOCOLabels(
+        "/home/alex/Projects/MediumBlog/YoloOnnxRuntimeCPP/labels/coco.txt");
     for (auto &box: boxes) {
         cv::rectangle(image, box.bounding_box, cv::Scalar(0, 255, 0), 2);
         std::string label = labels[box.class_id];
