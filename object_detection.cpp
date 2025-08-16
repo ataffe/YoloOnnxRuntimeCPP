@@ -9,6 +9,7 @@
 #include <string>
 #include <map>
 #include <iostream>
+#include <chrono>
 
 struct YoloBoundingBox {
     cv::Rect bounding_box;
@@ -152,9 +153,10 @@ int main() {
     const Ort::Env env(ORT_LOGGING_LEVEL_ERROR, "Yolo Tutorial");
     OrtCUDAProviderOptionsV2 *cuda_provider = nullptr;
     Ort::Session yolo_model_session = LoadYoloModel(
-        env, "/home/alex/Projects/MediumBlog/YoloOnnxRuntimeCPP/weights/yolo11s-coco.onnx", cuda_provider);
+        env, "weights/yolo11n-detect-coco.onnx", cuda_provider);
     cv::Mat image =
-            cv::imread("/home/alex/Projects/MediumBlog/YoloOnnxRuntimeCPP/test_images/ex2_coco2017.jpg");
+            cv::imread("test_images/ex2_coco2017.jpg");
+
     cv::Mat blob = ImageToBlob(image);
     Ort::Value input_tensor = BlobToONNXTensor(blob);
     Ort::AllocatorWithDefaultOptions allocator;
@@ -170,10 +172,13 @@ int main() {
         output_names,
         1
     );
+
     cv::Mat raw_boxes = GetYoloBoxes(output);
     std::vector<YoloBoundingBox> boxes = ProcessYoloOutput(raw_boxes, image.size());
+
+
     std::map<int, std::string> labels = ReadCOCOLabels(
-        "/home/alex/Projects/MediumBlog/YoloOnnxRuntimeCPP/labels/coco.txt");
+        "/labels/coco.txt");
     for (auto &box: boxes) {
         cv::rectangle(image, box.bounding_box, cv::Scalar(0, 255, 0), 2);
         std::string label = labels[box.class_id];

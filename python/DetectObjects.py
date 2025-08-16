@@ -1,9 +1,9 @@
 from ultralytics import YOLO
 
-model = YOLO('../weights/yolo11s_imagenet.pt')
+model = YOLO('/weights/yolo11n-detect-coco.pt')
 model.eval()
 
-results = model('../test_images/ExampleImageUnsplash.jpg')
+results = model('/home/alex/Projects/MediumBlog/YoloOnnxRuntimeCPP/test_images/ex2_coco2017.jpg')
 
 for result in results:
     result.show()
