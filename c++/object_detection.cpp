@@ -109,11 +109,6 @@ std::vector<YoloBoundingBox> ProcessYoloBoundingBoxes(const cv::Mat &raw_boxes, 
     std::vector<YoloBoundingBox> processed_boxes;
     for (int row = 0; row < raw_boxes.rows; row++) {
         // Step 1: Parse x, y, Width, Height, max class score
-        float width = bounding_box_data[2];
-        float height = bounding_box_data[3];
-        float x = MAX((bounding_box_data[0] - 0.5 * width), 0);
-        float y = MAX((bounding_box_data[1] - 0.5 * height), 0);
-        cv::Rect bounding_box(x, y, width, height);
         // Save all class scores 1 - 80 starting at index 4
         cv::Mat class_scores = cv::Mat(1, num_classes, CV_32FC1, bounding_box_data + 4);
         cv::Point class_id_tmp;
@@ -122,6 +117,11 @@ std::vector<YoloBoundingBox> ProcessYoloBoundingBoxes(const cv::Mat &raw_boxes, 
         cv::minMaxLoc(class_scores, nullptr, &confidence, nullptr, &class_id_tmp);
         // Step 2: Filter boxes by confidence
         if (confidence > 0.25) {
+            float width = bounding_box_data[2];
+            float height = bounding_box_data[3];
+            float x = MAX((bounding_box_data[0] - 0.5 * width), 0);
+            float y = MAX((bounding_box_data[1] - 0.5 * height), 0);
+            cv::Rect bounding_box(x, y, width, height);
             int class_id = class_id_tmp.x;
             YoloBoundingBox parsed_box(bounding_box, confidence, class_id);
             processed_boxes.push_back(parsed_box);
