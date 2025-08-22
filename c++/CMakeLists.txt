@@ -10,18 +10,25 @@ find_package(OpenCV REQUIRED)
 
 add_executable(object_detection object_detection.cpp letter_box.h)
 add_executable(object_segmentation object_segmentation.cpp letter_box.h)
+add_executable(video_test video_test.cpp letter_box.h)
 
-target_link_libraries(object_detection PUBLIC onnxruntime ${OpenCV_LIBS} ${CUDA_LIBRARIES})
-target_link_libraries(object_segmentation PUBLIC onnxruntime ${OpenCV_LIBS} ${CUDA_LIBRARIES})
+target_link_libraries(object_detection PUBLIC onnxruntime ${OpenCV_LIBS})
+target_link_libraries(object_segmentation PUBLIC onnxruntime ${OpenCV_LIBS})
+target_link_libraries(video_test PUBLIC onnxruntime ${OpenCV_LIBS})
 
 set_property(TARGET object_detection PROPERTY CXX_STANDARD 20)
 set_property(TARGET object_segmentation PROPERTY CXX_STANDARD 20)
+set_property(TARGET video_test PROPERTY CXX_STANDARD 20)
 
 set_target_properties(object_detection PROPERTIES
         BUILD_RPATH "${ONNXRUNTIME_ROOT}/lib"
         INSTALL_RPATH "${ONNXRUNTIME_ROOT}/lib"
 )
 set_target_properties(object_segmentation PROPERTIES
+        BUILD_RPATH "${ONNXRUNTIME_ROOT}/lib"
+        INSTALL_RPATH "${ONNXRUNTIME_ROOT}/lib"
+)
+set_target_properties(video_test PROPERTIES
         BUILD_RPATH "${ONNXRUNTIME_ROOT}/lib"
         INSTALL_RPATH "${ONNXRUNTIME_ROOT}/lib"
 )
