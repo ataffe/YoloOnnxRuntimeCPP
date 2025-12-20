@@ -15,6 +15,13 @@
 #include <string>
 #include <map>
 #include <iostream>
+#include <chrono>
+#include <numeric>
+#include <execution>
+#include <bits/fs_fwd.h>
+#include <filesystem>
+
+namespace  fs = std::filesystem;
 
 struct YoloBoundingBox {
     cv::Rect bounding_box;
@@ -23,6 +30,13 @@ struct YoloBoundingBox {
     std::vector<float> mask_coefficients;
     cv::Mat mask;
 };
+
+long log_time(std::chrono::system_clock::time_point start_time, const std::string& msg) {
+    std::chrono::system_clock::time_point end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_time);
+    std::cout << msg << " : " << duration.count() << " ms" << std::endl;
+    return duration.count();
+}
 
 std::map<int, std::string> ReadCOCOLabels(const std::string &labels_path) {
     std::ifstream labels_file(labels_path);
@@ -46,6 +60,7 @@ Ort::Session LoadYoloModel(const Ort::Env &env, const std::string &model_path,
     Ort::SessionOptions yolo_session_options;
     Ort::ThrowOnError(Ort::GetApi().CreateCUDAProviderOptions(&cuda_provider));
     yolo_session_options.AppendExecutionProvider_CUDA_V2(*cuda_provider);
+    yolo_session_options.SetGraphOptimizationLevel(ORT_ENABLE_ALL);
     Ort::Session yolo_model_session(env, model_path.c_str(), yolo_session_options);
     return yolo_model_session;
 }
@@ -173,11 +188,7 @@ std::vector<YoloBoundingBox> ProcessYoloBoundingBoxes(const cv::Mat &raw_boxes, 
         // Advance data pointer to next row
         bounding_box_data += data_width;
     }
-    // Step 3: Scale boxes
-    for (auto &box: processed_boxes) {
-        ScaleYoloBoundingBox(box, original_shape);
-    }
-    // Step 4: Non-Max Suppression
+    // Step 3: Non-Max Suppression
     std::vector<cv::Rect> boxes;
     std::vector<float> confidences;
     std::vector<int> filtered_idxs;
@@ -190,36 +201,41 @@ std::vector<YoloBoundingBox> ProcessYoloBoundingBoxes(const cv::Mat &raw_boxes, 
     for (auto &idx: filtered_idxs) {
         filtered_boxes.push_back(processed_boxes[idx]);
     }
+
+    // Step 4: Scale bounding Boxes
+    for (auto &box: filtered_boxes) {
+        ScaleYoloBoundingBox(box, original_shape);
+    }
     return filtered_boxes;
 }
 
 void ProcessYOLOMasks(std::vector<YoloBoundingBox> &boxes, const cv::Mat &raw_proto_masks, cv::Size orig_img_size) {
     int proto_mask_width = raw_proto_masks.size[2];
     int proto_mask_height = raw_proto_masks.size[3];
-
     // Reshape from 4d: [1, 32, 160, 160] to 2d: [32, 160 * 160]
     cv::Mat proto_masks = raw_proto_masks.clone().reshape(0, {
                                                               32,
                                                               proto_mask_width * proto_mask_height
                                                           });
-    for (auto &box: boxes) {
-        // Convert coefficients to matrix and Combine mask prototypes and coefficients
-        cv::Mat combined_masks = cv::Mat(box.mask_coefficients).t() * proto_masks;
-        // Reshape to 2d: [1, 160 * 160]
-        combined_masks = combined_masks.reshape(1, {proto_mask_width, proto_mask_height});
-        // Scale back to original size and remove letterbox padding
-        cv::Mat scaled_mask = ResizeMaskRemoveLetterbox(combined_masks, orig_img_size, cv::Size(640, 640));
-        // Crop to bounding box
-        cv::Mat cropped_mask = cv::Mat::zeros(scaled_mask.size(), scaled_mask.type());
-        scaled_mask(box.bounding_box).copyTo(cropped_mask(box.bounding_box));
-        // Convert to binary mask
-        cropped_mask.convertTo(box.mask, CV_8UC1, 255);
-    }
+    std::for_each(
+        std::execution::seq,
+        boxes.begin(),
+        boxes.end(),
+        [proto_masks, proto_mask_width, proto_mask_height, orig_img_size](auto && box) {
+            cv::Mat combined_masks = cv::Mat(box.mask_coefficients).t() * proto_masks;
+            combined_masks = combined_masks.reshape(1, {proto_mask_width, proto_mask_height});
+            cv::Mat scaled_mask = ResizeMaskRemoveLetterbox(combined_masks, orig_img_size, cv::Size(640, 640));
+            cv::Mat cropped_mask = scaled_mask(box.bounding_box).clone();
+            cropped_mask.convertTo(box.mask, CV_8UC1, 255);
+        }
+        );
 }
 
 void DrawBoxes(const std::vector<YoloBoundingBox> &boxes, const cv::Mat &image) {
     std::map<int, std::string> labels = ReadCOCOLabels(
         "labels/coco.txt");
+    cv::Mat masked_img = image.clone();
+    auto mask_color = cv::Scalar(255, 255, 0);
     for (const auto &box: boxes) {
         // Draw bounding box
         cv::rectangle(image, box.bounding_box, cv::Scalar(0, 255, 0), 2);
@@ -237,11 +253,14 @@ void DrawBoxes(const std::vector<YoloBoundingBox> &boxes, const cv::Mat &image) 
                     cv::Scalar(255, 255, 255), 1, cv::LINE_AA);
 
         // Draw mask
-        cv::Mat mask = image.clone();
-        auto mask_color = cv::Scalar(0, 0, 255);
-        mask(box.bounding_box).setTo(mask_color, box.mask(box.bounding_box));
-        cv::addWeighted(image, 0.5, mask, 0.5, 0, image);
+        cv::Mat roi = masked_img(box.bounding_box);
+        roi.setTo(mask_color, box.mask);
+        // cv::Mat mask = image.clone();
+        // auto mask_color = cv::Scalar(0, 0, 255);
+        // mask(box.bounding_box).setTo(mask_color, box.mask(box.bounding_box));
+        // cv::addWeighted(image, 0.5, mask, 0.5, 0, image);
     }
+    cv::addWeighted(image, 0.5, masked_img, 0.5, 0, image);
 }
 
 cv::Mat getYoloProtoMasks(std::vector<Ort::Value> &detection) {
@@ -255,11 +274,14 @@ cv::Mat getYoloProtoMasks(std::vector<Ort::Value> &detection) {
     return {mask_sz, CV_32F, detection[1].GetTensorMutableData<float>()};
 }
 
+
+
 int main() {
     // video
     std::string video_path = "videos/baseball.mp4";
     cv::VideoCapture cap(video_path, cv::CAP_FFMPEG);
-    std::string video_name = "videos" +  video_path.substr(video_path.find_last_of("/\\"));
+    fs::create_directories("videos/processed/c++");
+    std::string video_name = "videos/processed/c++" +  video_path.substr(video_path.find_last_of("/\\"));
     video_name.replace(video_name.find(".mp4"), std::string("_processed.mp4").length(), "_processed.mp4");
     cv::VideoWriter writer(video_name, cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
         30, cv::Size(cap.get(cv::CAP_PROP_FRAME_WIDTH), cap.get(cv::CAP_PROP_FRAME_HEIGHT)), true);
@@ -271,12 +293,18 @@ int main() {
         env, "weights/yolo11n-seg-coco.onnx", cuda_provider);
 
     cv::Mat frame;
+    std::chrono::system_clock::time_point start_time;
+    std::chrono::system_clock::time_point loop_start_time;
+    std::chrono::system_clock::time_point processing_start_time;
+    std::vector<long> loop_times;
     while (cap.isOpened()) {
+        loop_start_time = std::chrono::high_resolution_clock::now();
         // read frame
         cap.read(frame);
         if (frame.empty()) {
             break;
         }
+        start_time = std::chrono::high_resolution_clock::now();
         // Convert image to blob
         cv::Mat blob = ImageToBlob(frame);
         // Convert blob to tensor
@@ -289,6 +317,8 @@ int main() {
         const char *input_names[] = {input_name.c_str()};
         const char *output_names[] = {output_name1.c_str(), output_name2.c_str()};
 
+        log_time(start_time, "Preprocessing Time");
+        start_time = std::chrono::high_resolution_clock::now();
         // Run inference
         std::vector<Ort::Value> output = yolo_model_session.Run(
             Ort::RunOptions{nullptr},
@@ -298,20 +328,44 @@ int main() {
             output_names,
             2
         );
+        log_time(start_time, "Inference Time");
+        processing_start_time = std::chrono::high_resolution_clock::now();
         // Get bounding boxes as a Mat object
         cv::Mat raw_boxes = GetYoloBoxes(output);
         // Get masks as a Mat object
         cv::Mat prototype_masks = getYoloProtoMasks(output);
+        start_time = std::chrono::high_resolution_clock::now();
         // Process bounding boxes
         std::vector<YoloBoundingBox> boxes = ProcessYoloBoundingBoxes(raw_boxes, frame.size());
+        log_time(start_time, "Box Processing");
+        start_time = std::chrono::high_resolution_clock::now();
         // Process segmentation masks
         ProcessYOLOMasks(boxes, prototype_masks, frame.size());
+        log_time(start_time, "Mask Processing");
+        log_time(processing_start_time, "Postprocessing Time");
+
+        start_time = std::chrono::high_resolution_clock::now();
         // Draw boxes on image
         DrawBoxes(boxes, frame);
+        // log loop time
+        log_time(start_time, "Drawing Time");
+        long loop_time = log_time(loop_start_time, "Loop Time");
+        loop_times.push_back(loop_time);
+
         cv::imshow(video_name, frame);
         writer.write(frame);
-        cv::waitKey(1);
+        if (char c = cv::waitKey(1); c == 27) {
+            break; // Exit on ESC key
+        }
+
+        for (int i = 0; i < 30; i++) {
+            std::cout << "--";
+        }
+        std::cout << std::endl;
     }
+    float avg_loop_time = std::accumulate(loop_times.begin(), loop_times.end(), 0.0f) / loop_times.size();
+    std::cout << "Average loop time: " << avg_loop_time << "ms" << std::endl;
+    std::cout << "Average FPS: " << (1 / avg_loop_time) * 1000 << std::endl;
     Ort::GetApi().ReleaseCUDAProviderOptions(cuda_provider);
     cap.release();
     return 0;
