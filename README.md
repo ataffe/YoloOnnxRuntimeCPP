@@ -2,7 +2,7 @@
 An example of using Yolo with the Onnx runtime in C++ that 
 goes along with my blog post on [Medium](https://medium.com/@taffealexander/object-detection-with-yolo-and-onnx-runtime-in-c-c8bfb964520b).
 
-![A segmented image of a giraffe and person](images/YoloObjectSegmentationResults.jpg)
+![A segmented image of a giraffe and person](images/processed_images/YoloObjectSegmentationResults.jpg)
 
 # Requirements:
 - ONNX Runtime
@@ -46,14 +46,14 @@ See the [object detection article](https://medium.com/@taffealexander/object-det
 #### **Filename**: video_test.cpp
 
 | Task                         | Average Latency (ms) |
-|------------------------------|----------------------|
-| Pre-processing               | 10                   |
-| Inference                    | 7                    |
-| Bounding Box Post-processing | 2                    |
-| Mask Post-processing         | 10                   |
-| Drawing Boxes / Masks        | 2                    |
-| Total loop time              | 33                   |
+|------------------------------|----------|
+| Pre-processing               |          |
+| Inference                    |          |
+| Bounding Box Post-processing |          |
+| Mask Post-processing         |          |
+| Drawing Boxes / Masks        |          |
+| Total loop time              |          |
 
 | Frames per second |
-|-------------------|
-| 30                |
+|--------------|
+|              |

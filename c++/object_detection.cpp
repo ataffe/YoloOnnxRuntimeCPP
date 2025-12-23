@@ -155,7 +155,7 @@ int main() {
     Ort::Session yolo_model_session = LoadYoloModel(
         env, "weights/yolo11n-detect-coco.onnx", cuda_provider);
     cv::Mat image =
-            cv::imread("test_images/ex2_coco2017.jpg");
+            cv::imread("images/test_images/ex2_coco2017.jpg");
 
     cv::Mat blob = ImageToBlob(image);
     Ort::Value input_tensor = BlobToONNXTensor(blob);
@@ -194,7 +194,7 @@ int main() {
                     cv::Scalar(255, 255, 255), 1, cv::LINE_AA);
     }
     cv::imshow("Test Image", image);
-    cv::imwrite("output.jpg", image);
+    cv::imwrite("images/test_images/YoloObjectDetection.jpg", image);
     cv::waitKey(0);
     Ort::GetApi().ReleaseCUDAProviderOptions(cuda_provider);
     return 0;

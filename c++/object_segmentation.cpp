@@ -261,7 +261,7 @@ int main() {
     Ort::Session yolo_model_session = LoadYoloModel(
         env, "weights/yolo11n-seg-coco.onnx", cuda_provider);
     // Read image
-    cv::Mat image = cv::imread("test_images/ex5_coco2017.jpg");
+    cv::Mat image = cv::imread("images/test_images/ex5_coco2017.jpg");
     // Convert image to blob
     cv::Mat blob = ImageToBlob(image);
     // Convert blob to tensor
@@ -294,7 +294,7 @@ int main() {
     // Draw boxes on image
     Draw(boxes, image);
     cv::imshow("Test Image", image);
-    cv::imwrite("images/YoloObjectSegmentationResults.jpg", image);
+    cv::imwrite("images/processed_images/YoloObjectSegmentationResults.jpg", image);
     cv::waitKey(0);
     Ort::GetApi().ReleaseCUDAProviderOptions(cuda_provider);
     return 0;

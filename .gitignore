@@ -43,8 +43,6 @@
 .idea
 cmake-build-debug
 libs
-output.jpg
-images
 test_videos/processed
 test_videos/cars.mp4
 test_videos/cats.mp4
