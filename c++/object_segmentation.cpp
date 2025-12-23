@@ -215,7 +215,7 @@ void ProcessYOLOMasks(std::vector<YoloBoundingBox> &boxes, const cv::Mat &raw_pr
     }
 }
 
-void DrawBoxes(const std::vector<YoloBoundingBox> &boxes, const cv::Mat &image) {
+void Draw(const std::vector<YoloBoundingBox> &boxes, const cv::Mat &image) {
     std::map<int, std::string> labels = ReadCOCOLabels(
         "labels/coco.txt");
     for (const auto &box: boxes) {
@@ -236,7 +236,7 @@ void DrawBoxes(const std::vector<YoloBoundingBox> &boxes, const cv::Mat &image) 
 
         // Draw mask
         cv::Mat mask = image.clone();
-        auto mask_color = cv::Scalar(0, 0, 255);
+        auto mask_color = cv::Scalar(238, 2, 96);
         mask(box.bounding_box).setTo(mask_color, box.mask(box.bounding_box));
         cv::addWeighted(image, 0.5, mask, 0.5, 0, image);
     }
@@ -261,7 +261,7 @@ int main() {
     Ort::Session yolo_model_session = LoadYoloModel(
         env, "weights/yolo11n-seg-coco.onnx", cuda_provider);
     // Read image
-    cv::Mat image = cv::imread("test_images/ex1_coco2017.jpg");
+    cv::Mat image = cv::imread("test_images/ex5_coco2017.jpg");
     // Convert image to blob
     cv::Mat blob = ImageToBlob(image);
     // Convert blob to tensor
@@ -292,9 +292,9 @@ int main() {
     // Process segmentation masks
     ProcessYOLOMasks(boxes, prototype_masks, image.size());
     // Draw boxes on image
-    DrawBoxes(boxes, image);
+    Draw(boxes, image);
     cv::imshow("Test Image", image);
-    cv::imwrite("output.jpg", image);
+    cv::imwrite("images/YoloObjectSegmentationResults.jpg", image);
     cv::waitKey(0);
     Ort::GetApi().ReleaseCUDAProviderOptions(cuda_provider);
     return 0;

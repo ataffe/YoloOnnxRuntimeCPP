@@ -13,13 +13,11 @@ class BoundingBox:
         self.mask = None
 
 def preprocess_img(img: np.ndarray) -> np.ndarray:
-    # img = cv2.resize(img, (640, 640))
     img = resize_letter_box(img, (640, 640))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = img.transpose(2, 0, 1)
-    img = img.reshape(1, 3, 640, 640)
-    img = img / 255.0
-    img = img.astype(np.float32)
+    img = np.ascontiguousarray(img.transpose(2, 0, 1))
+    img = img[None, ...]
+    img = img.astype(np.float32) * (1.0 / 255.0)
     return img
 
 def resize_letter_box(img: np.ndarray, new_size: tuple) -> np.ndarray:
@@ -159,10 +157,26 @@ def process_bounding_boxes(boxes: np.ndarray, img_size) -> list[BoundingBox]:
     print(f'\tScaling time: {(time.perf_counter()-start)*1000:.0f} ms')
     return scaled_boxes
 
+def compute_letterbox_params(original_img_size, letterbox_size):
+    lb_w, lb_h = letterbox_size
+    img_w, img_h = original_img_size
+
+    scale = min(lb_h / img_h, lb_w / img_w)
+    unpad_w = int(round(img_w * scale))
+    unpad_h = int(round(img_h * scale))
+
+    pad_w = lb_w - unpad_w
+    pad_h = lb_h - unpad_h
+    pad_left = pad_w // 2
+    pad_top = pad_h // 2
+
+    return scale, pad_left, pad_top, unpad_w, unpad_h
+
 def process_masks(proto_masks: np.ndarray, bboxes: list[BoundingBox], img_size: tuple) -> list[BoundingBox]:
     mask_width, mask_height = proto_masks.shape[2:]
-    proto_masks = proto_masks.reshape((32, mask_width * mask_height))
+    proto_masks = proto_masks.reshape(32, -1)
     width, height = img_size
+
     # Iterates boxes; extracts and applies mask; thresholds mask
     for box in bboxes:
         mask_coefficients = box.mask_coefficients
@@ -177,6 +191,7 @@ def process_masks(proto_masks: np.ndarray, bboxes: list[BoundingBox], img_size: 
         _, cropped_mask = cv2.threshold(cropped_mask, 0.5, 255, cv2.THRESH_BINARY)
         box.mask = cropped_mask
     return bboxes
+
 
 def draw_boxes(img: np.ndarray, boxes: list[BoundingBox]) -> np.ndarray:
     # Draws boxes and overlays masks onto the image
@@ -196,9 +211,9 @@ def draw_boxes(img: np.ndarray, boxes: list[BoundingBox]) -> np.ndarray:
 
 if __name__ == "__main__":
     model_path = 'weights/yolo11n-seg-coco.onnx'
-    video_path = 'videos/baseball.mp4'
-    output_path = f'videos/processed/python/{video_path.split("/")[-1]}'
-    Path('videos/processed/python').mkdir(parents=True, exist_ok=True)
+    video_path = 'test_videos/baseball.mp4'
+    output_path = f'test_videos/processed/python/{video_path.split("/")[-1]}'
+    Path('test_videos/processed/python').mkdir(parents=True, exist_ok=True)
 
     video = cv2.VideoCapture(video_path)
     orig_img_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -262,7 +277,7 @@ if __name__ == "__main__":
         # Mask processing
         s = time.perf_counter()
         masks = outputs[1]
-        masks = process_masks(masks, bounding_boxes, (orig_img_width, orig_img_height))
+        bounding_boxes = process_masks(masks, bounding_boxes, (orig_img_width, orig_img_height))
         time_diff = time.perf_counter() - s
         print(f'Mask Processing: {time_diff*1000:.0f} ms')
         avg_mask_processing_time_ms += time_diff * 1000
@@ -278,14 +293,15 @@ if __name__ == "__main__":
         end_time = time.perf_counter()
         avg_loop_time += end_time - start_time
         cv2.imshow('image', image)
-        cv2.waitKey(1)
+        if cv2.waitKey(1) == ord('q'):
+            break
         writer.write(image)
         print('-' * 10)
 
     video.release()
     cv2.destroyAllWindows()
     avg_loop_time = avg_loop_time / frames_processed
-    print(f"Average processing time: {avg_preprocess_time_ms / frames_processed:.0f} ms")
+    print(f"Average pre-processing time: {avg_preprocess_time_ms / frames_processed:.0f} ms")
     print(f"Average inference time: {avg_inference_time_ms / frames_processed:.0f} ms")
     print(f"Average box processing time: {avg_box_processing_time_ms / frames_processed:.0f} ms")
     print(f"Average mask processing time: {avg_mask_processing_time_ms / frames_processed:.0f} ms")
