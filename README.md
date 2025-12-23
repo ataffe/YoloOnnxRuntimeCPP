@@ -42,7 +42,7 @@ See the [object detection article](https://medium.com/@taffealexander/object-det
 |-------------------|
 | 50                |
 
-### Python
+### Python (Not finished yet)
 #### **Filename**: video_test.cpp
 
 | Task                         | Average Latency (ms) |
